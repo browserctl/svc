@@ -121,8 +121,10 @@ func main() {
 
 	go func() {
 		srv := httpSrv.Serve()
-		logger.Info("http server listening", "port", cfg.HttpPort)
-		srv.ListenAndServe()
+		logger.Info("http server listening on :" + strconv.Itoa(cfg.HttpPort))
+		if err := srv.ListenAndServe(); err != nil {
+			logger.Error("http server error", "err", err)
+		}
 	}()
 
 	if !cfg.NoLaunch && cfg.ExtPath != "" {

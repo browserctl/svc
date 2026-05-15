@@ -13,7 +13,7 @@ type Router struct {
 	windowRegistry map[int]*extensionWS
 	firstWindowId  int
 
-	tabToWindow   map[int]int
+	tabToWindow    map[int]int
 	domainToWindow map[string]int
 }
 
@@ -37,6 +37,14 @@ func (r *Router) RegisterWindow(windowId int, ws *extensionWS) {
 
 func (r *Router) UnregisterWindow(windowId int) {
 	delete(r.windowRegistry, windowId)
+	if r.firstWindowId == windowId {
+		r.firstWindowId = 0
+		for wid := range r.windowRegistry {
+			if r.firstWindowId == 0 || wid < r.firstWindowId {
+				r.firstWindowId = wid
+			}
+		}
+	}
 	for tabId, wid := range r.tabToWindow {
 		if wid == windowId {
 			delete(r.tabToWindow, tabId)

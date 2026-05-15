@@ -11,17 +11,17 @@ type MsgRegister struct {
 }
 
 type MsgTabsList struct {
-	Type  string `json:"type"` // "tabs_list"
-	ID    int64  `json:"id,omitempty"`
-	Tabs  []Tab  `json:"tabs"`
+	Type string `json:"type"` // "tabs_list"
+	ID   int64  `json:"id,omitempty"`
+	Tabs []Tab  `json:"tabs"`
 }
 
 type Tab struct {
 	ID       int    `json:"id"`
 	WindowId int    `json:"windowId,omitempty"`
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Active  bool   `json:"active"`
+	Title    string `json:"title"`
+	URL      string `json:"url"`
+	Active   bool   `json:"active"`
 }
 
 // SvcToExt messages
@@ -32,10 +32,10 @@ type MsgGetTabs struct {
 
 type MsgCdpCommand struct {
 	Type   string                 `json:"type"` // "cdp_command"
-	TabId  int                     `json:"tabId"`
-	Method string                  `json:"method"`
-	Params map[string]interface{}  `json:"params"`
-	ID     int64                   `json:"id"`
+	TabId  int                    `json:"tabId"`
+	Method string                 `json:"method"`
+	Params map[string]interface{} `json:"params"`
+	ID     int64                  `json:"id"`
 }
 
 type MsgTabAttach struct {
@@ -77,9 +77,9 @@ type MsgCdpResult struct {
 
 type MsgCdpEvent struct {
 	Type   string                 `json:"type"` // "cdp_event"
-	TabId  int                     `json:"tabId"`
-	Method string                  `json:"method"`
-	Params map[string]interface{}  `json:"params"`
+	TabId  int                    `json:"tabId"`
+	Method string                 `json:"method"`
+	Params map[string]interface{} `json:"params"`
 }
 
 type MsgTabAttachResult struct {
@@ -100,10 +100,10 @@ type MsgNewTabResult struct {
 // ─── CDP JSON-RPC ─────────────────────────────────────────────────────────────
 
 type JsonRpcRequest struct {
-	ID       int64                   `json:"id"`
-	Method   string                   `json:"method"`
-	Params   map[string]interface{}   `json:"params,omitempty"`
-	SessionId string                  `json:"sessionId,omitempty"`
+	ID        int64                  `json:"id"`
+	Method    string                 `json:"method"`
+	Params    map[string]interface{} `json:"params,omitempty"`
+	SessionId string                 `json:"sessionId,omitempty"`
 }
 
 type JsonRpcResponse struct {
@@ -113,8 +113,8 @@ type JsonRpcResponse struct {
 }
 
 type JsonRpcNotification struct {
-	Method string                  `json:"method"`
-	Params map[string]interface{}  `json:"params,omitempty"`
+	Method string                 `json:"method"`
+	Params map[string]interface{} `json:"params,omitempty"`
 }
 
 type RpcError struct {
@@ -132,10 +132,10 @@ type PendingRequest struct {
 // ─── Target info ─────────────────────────────────────────────────────────────
 
 type TargetInfo struct {
-	TargetId       string `json:"targetId"`
-	Type           string `json:"type"`
-	Title          string `json:"title"`
-	URL            string `json:"url"`
-	Attached       bool   `json:"attached"`
+	TargetId         string `json:"targetId"`
+	Type             string `json:"type"`
+	Title            string `json:"title"`
+	URL              string `json:"url"`
+	Attached         bool   `json:"attached"`
 	BrowserContextId string `json:"browserContextId"`
 }

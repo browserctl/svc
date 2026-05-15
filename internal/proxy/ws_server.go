@@ -683,7 +683,7 @@ func (s *CdpServer) checkAuth(r *http.Request) bool {
 	if r.Header.Get("Authorization") == s.secret {
 		return true
 	}
-	if r.URL.Query().Get("secret") == s.secret {
+	if r.URL != nil && r.URL.Query().Get("secret") == s.secret {
 		return true
 	}
 	return false

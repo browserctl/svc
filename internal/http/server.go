@@ -2,14 +2,15 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 )
 
 type Server struct {
 	httpPort int
-	cdpPort   int
-	statusFn  func() map[string]interface{}
+	cdpPort  int
+	statusFn func() map[string]interface{}
 }
 
 func NewServer(httpPort, cdpPort int, statusFn func() map[string]interface{}) *Server {
@@ -46,5 +47,8 @@ func (s *Server) Serve() *http.Server {
 		json.NewEncoder(w).Encode(s.statusFn())
 	})
 
-	return &http.Server{Addr: "", Handler: mux}
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%d", s.httpPort),
+		Handler: mux,
+	}
 }
