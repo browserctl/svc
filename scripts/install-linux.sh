@@ -37,7 +37,6 @@ WorkingDirectory=$SCRIPT_DIR
 Environment=BROWSERCTL_SVC_PORT=9222
 Environment=BROWSERCTL_HTTP_PORT=9223
 Environment=BROWSERCTL_PROFILE_DIR=$CURRENT_HOME/.config/browserctl
-Environment=BROWSERCTL_EXT_PATH=$SCRIPT_DIR/../ext/chromium
 
 ExecStart=$BINARY
 

@@ -15,8 +15,6 @@ type Config struct {
 	SvcPort    int
 	HttpPort   int
 	ProfileDir string
-	ExtPath    string
-	NoLaunch   bool
 }
 
 func loadConfig() Config {
@@ -24,7 +22,6 @@ func loadConfig() Config {
 		SvcPort:    9222,
 		HttpPort:   9223,
 		ProfileDir: chrome.DefaultProfileDir(),
-		ExtPath:    chrome.DefaultExtPath(),
 	}
 
 	readEnv(&cfg, ".env")
@@ -45,12 +42,6 @@ func loadConfig() Config {
 	}
 	if v := os.Getenv("BROWSERCTL_PROFILE_DIR"); v != "" {
 		cfg.ProfileDir = v
-	}
-	if v := os.Getenv("BROWSERCTL_EXT_PATH"); v != "" {
-		cfg.ExtPath = v
-	}
-	if v := os.Getenv("BROWSERCTL_NO_LAUNCH"); v != "" {
-		cfg.NoLaunch = v == "true" || v == "1"
 	}
 
 	return cfg
@@ -85,10 +76,6 @@ func readEnv(cfg *Config, path string) {
 			}
 		case "BROWSERCTL_PROFILE_DIR":
 			cfg.ProfileDir = val
-		case "BROWSERCTL_EXT_PATH":
-			cfg.ExtPath = val
-		case "BROWSERCTL_NO_LAUNCH":
-			cfg.NoLaunch = val == "true" || val == "1"
 		}
 	}
 }
@@ -105,10 +92,10 @@ func main() {
 		"http", cfg.HttpPort,
 		"secret", cfg.Secret != "",
 		"profile", cfg.ProfileDir,
-		"ext", cfg.ExtPath,
 	)
 
 	cdpServer := proxy.NewCdpServer(cfg.SvcPort, cfg.Secret, logger)
+	cdpServer.SetProfileDir(cfg.ProfileDir)
 
 	if err := cdpServer.Start(); err != nil {
 		logger.Error("failed to start CDP server", "err", err)
@@ -126,13 +113,6 @@ func main() {
 			logger.Error("http server error", "err", err)
 		}
 	}()
-
-	if !cfg.NoLaunch && cfg.ExtPath != "" {
-		launcher := chrome.NewLauncher(logger, cfg.ProfileDir, cfg.ExtPath)
-		if err := launcher.Launch(); err != nil {
-			logger.Warn("Chrome launch failed", "err", err)
-		}
-	}
 
 	logger.Info("browserctl/svc ready", "ws", cfg.SvcPort, "http", cfg.HttpPort)
 

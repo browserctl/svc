@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"browserctl/svc/internal/chrome"
 	"github.com/gorilla/websocket"
 )
 
@@ -50,10 +51,11 @@ func newPendingCallback(client *clientWS, method string, onResult func(result in
 
 // CdpServer is the transparent CDP proxy.
 type CdpServer struct {
-	port    int
-	secret  string
-	logger  *slog.Logger
-	router  *Router
+	port       int
+	secret     string
+	logger     *slog.Logger
+	router     *Router
+	profileDir string
 
 	httpServer    *http.Server
 	extensionConn *extensionWS
@@ -86,6 +88,10 @@ func NewCdpServer(port int, secret string, logger *slog.Logger) *CdpServer {
 		prevTabIds: make(map[int]string),
 		startTime:  time.Now(),
 	}
+}
+
+func (s *CdpServer) SetProfileDir(profileDir string) {
+	s.profileDir = profileDir
 }
 
 // Start the WebSocket + HTTP server
@@ -360,6 +366,21 @@ func (s *CdpServer) dispatchCdpCommand(client *clientWS, req *JsonRpcRequest) {
 
 	case "Browser.crash":
 		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: map[string]interface{}{}})
+		return
+
+	case "Browser.launch":
+		extPath := ""
+		if params != nil {
+			if v, ok := params["extPath"].(string); ok {
+				extPath = v
+			}
+		}
+		launcher := chrome.NewLauncher(s.logger, s.profileDir, extPath)
+		if err := launcher.Launch(); err != nil {
+			s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: err.Error()}})
+			return
+		}
+		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: map[string]interface{}{"success": true}})
 		return
 
 	case "Schema.getDomains":

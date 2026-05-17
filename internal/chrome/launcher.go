@@ -45,7 +45,10 @@ func (l *Launcher) Launch() error {
 		"--no-default-browser-check",
 		"--new-window",
 		fmt.Sprintf("--user-data-dir=%s", l.profileDir),
-		fmt.Sprintf("--load-extension=%s", l.extPath),
+	}
+
+	if l.extPath != "" {
+		args = append(args, fmt.Sprintf("--load-extension=%s", l.extPath))
 	}
 
 	cmd := exec.Command(l.chromePath, args...)
