@@ -14,7 +14,6 @@ build:
 	$(GO) build $(GOFLAGS) -o $(BINARY) ./cmd/svc
 
 lint:
-	@which golangci-lint > /dev/null 2>&1 || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin v2.12
 	golangci-lint run ./...
 
 test:
