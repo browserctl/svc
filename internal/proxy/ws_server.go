@@ -16,7 +16,7 @@ import (
 const (
 	PathExtension = "/extension"
 	PathDevTools   = "/devtools/"
-	DefaultPort    = 9223
+	DefaultPort    = 9222
 	WriteWait      = 10 * time.Second
 	PongWait       = 60 * time.Second
 	MaxMessageSize = 512 * 1024

@@ -1,51 +1,49 @@
-.PHONY: all build test clean run dev help
+.PHONY: all build install uninstall start stop restart
 
-# Variables
-BINARY=bin/browserctl-svc
 GO=go
 GOFLAGS=-ldflags="-s -w"
+SCRIPTS_DIR=$(shell pwd)/scripts
+OS=$(shell uname -s)
 
-# Default target
-all: test build
+BINARY=bin/browserctl-svc
 
-# Build the binary
+all: build
+
 build:
 	@mkdir -p bin
-	$(GO) build $(GOFLAGS) -o $(BINARY) ./cmd/server
+	$(GO) build $(GOFLAGS) -o $(BINARY) ./cmd/svc
 
-# Run tests
-test:
-	$(GO) test -v ./...
+install: build
+	@case "$(OS)" in \
+		Linux*)  $(SCRIPTS_DIR)/install-linux.sh ;; \
+		Darwin*) $(SCRIPTS_DIR)/install-macos.sh ;; \
+		*)       echo "Unsupported OS: $(OS)" >&2; exit 1 ;; \
+	esac
 
-# Run tests with coverage
-cover:
-	$(GO) test -v -coverprofile=coverage.out ./...
-	$(GO) tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: coverage.html"
+uninstall:
+	@case "$(OS)" in \
+		Linux*)  $(SCRIPTS_DIR)/uninstall-linux.sh ;; \
+		Darwin*) $(SCRIPTS_DIR)/uninstall-macos.sh ;; \
+		*)       echo "Unsupported OS: $(OS)" >&2; exit 1 ;; \
+	esac
 
-# Run the service (dev mode)
-run: build
-	./$(BINARY)
+start:
+	@case "$(OS)" in \
+		Linux*)  sudo systemctl start browserctl-svc && echo "browserctl-svc started" ;; \
+		Darwin*) launchctl load ~/Library/LaunchAgents/com.browserctl.svc.plist && echo "browserctl-svc started" ;; \
+		*)       echo "Unsupported OS: $(OS)" >&2; exit 1 ;; \
+	esac
 
-# Run with custom env
-dev:
-	./$(BINARY)
+stop:
+	@case "$(OS)" in \
+		Linux*)  sudo systemctl stop browserctl-svc && echo "browserctl-svc stopped" ;; \
+		Darwin*) launchctl unload ~/Library/LaunchAgents/com.browserctl.svc.plist && echo "browserctl-svc stopped" ;; \
+		*)       echo "Unsupported OS: $(OS)" >&2; exit 1 ;; \
+	esac
 
-# Clean build artifacts
-clean:
-	rm -rf bin/
-	rm -f coverage.out coverage.html
-
-# Build for all platforms
-build-all:
-	GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o bin/browserctl-svc-linux-amd64 ./cmd/server
-	GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o bin/browserctl-svc-darwin-amd64 ./cmd/server
-
-# Lint
-lint:
-	$(GO) vet ./...
-	golangci-lint run 2>/dev/null || true
-
-# Generate mocks (if needed)
-generate:
-	$(GO) generate ./...
+restart:
+	@case "$(OS)" in \
+		Linux*)  sudo systemctl restart browserctl-svc && echo "browserctl-svc restarted" ;; \
+		Darwin*) launchctl unload ~/Library/LaunchAgents/com.browserctl.svc.plist 2>/dev/null || true; launchctl load ~/Library/LaunchAgents/com.browserctl.svc.plist && echo "browserctl-svc restarted" ;; \
+		*)       echo "Unsupported OS: $(OS)" >&2; exit 1 ;; \
+	esac
