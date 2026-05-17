@@ -1,4 +1,4 @@
-.PHONY: all build install uninstall start stop restart
+.PHONY: all build install uninstall start stop restart lint test
 
 GO=go
 GOFLAGS=-ldflags="-s -w"
@@ -12,6 +12,12 @@ all: build
 build:
 	@mkdir -p bin
 	$(GO) build $(GOFLAGS) -o $(BINARY) ./cmd/svc
+
+lint:
+	golangci-lint run ./...
+
+test:
+	$(GO) test ./...
 
 install: build
 	@case "$(OS)" in \
