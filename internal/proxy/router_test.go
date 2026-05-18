@@ -93,13 +93,13 @@ func TestIsHttp(t *testing.T) {
 func TestRouterRegisterWindow(t *testing.T) {
 	r := NewRouter(newTestLogger())
 
-	ws1 := &extensionWS{windowId: 1}
+	ws1 := &extensionWS{}
 	r.RegisterWindow(1, ws1)
 	if r.firstWindowId != 1 {
 		t.Errorf("firstWindowId = %d, want 1", r.firstWindowId)
 	}
 
-	ws2 := &extensionWS{windowId: 2}
+	ws2 := &extensionWS{}
 	r.RegisterWindow(2, ws2)
 	if r.firstWindowId != 1 {
 		t.Errorf("firstWindowId changed to %d, want 1", r.firstWindowId)
@@ -138,16 +138,17 @@ func TestRouterUpdateTabs(t *testing.T) {
 
 func TestRouterGetWindowFallback(t *testing.T) {
 	r := NewRouter(newTestLogger())
-	r.RegisterWindow(1, &extensionWS{windowId: 1})
+	ws1 := &extensionWS{}
+	r.RegisterWindow(1, ws1)
 
 	got := r.GetWindowForTab(999)
-	if got == nil || got.windowId != 1 {
-		t.Errorf("GetWindowForTab(999) should return firstWindow")
+	if got == nil || got != ws1 {
+		t.Errorf("GetWindowForTab(999) should return ws1")
 	}
 
 	got = r.GetWindowForDomain("unknown.com")
-	if got == nil || got.windowId != 1 {
-		t.Errorf("GetWindowForDomain(unknown.com) should return firstWindow")
+	if got == nil || got != ws1 {
+		t.Errorf("GetWindowForDomain(unknown.com) should return ws1")
 	}
 
 	r2 := NewRouter(newTestLogger())
@@ -158,8 +159,10 @@ func TestRouterGetWindowFallback(t *testing.T) {
 
 func TestRouterUnregisterWindow(t *testing.T) {
 	r := NewRouter(newTestLogger())
-	r.RegisterWindow(1, &extensionWS{windowId: 1})
-	r.RegisterWindow(2, &extensionWS{windowId: 2})
+	ws1 := &extensionWS{}
+	ws2 := &extensionWS{}
+	r.RegisterWindow(1, ws1)
+	r.RegisterWindow(2, ws2)
 	r.UpdateTabs([]Tab{
 		{ID: 10, WindowId: 1, URL: "https://a.com"},
 		{ID: 20, WindowId: 2, URL: "https://b.com"},

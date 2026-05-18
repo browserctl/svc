@@ -9,3 +9,4 @@ linters:
       - path: "_test\\.go"
         linters:
           - errcheck
+          - unused
