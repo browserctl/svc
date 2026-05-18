@@ -52,7 +52,10 @@ func (l *Launcher) Launch() error {
 	}
 
 	cmd := exec.Command(l.chromePath, args...)
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		l.logger.Error("Chrome exited with error", "err", err)
+		return err
+	}
 
 	l.logger.Info("Chrome launching", "path", l.chromePath, "profile", l.profileDir, "ext", l.extPath)
 	return nil

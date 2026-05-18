@@ -39,12 +39,12 @@ func (s *Server) Serve() *http.Server {
 			out["chrome"] = chrome
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(out)
+		_ = json.NewEncoder(w).Encode(out)
 	})
 
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s.statusFn())
+		_ = json.NewEncoder(w).Encode(s.statusFn())
 	})
 
 	return &http.Server{

@@ -33,18 +33,19 @@ var upgrader = websocket.Upgrader{
 
 // extensionWS represents a connection from the Chrome extension
 type extensionWS struct {
-	ws       *websocket.Conn
-	windowId int
-	sendMu   sync.Mutex
+	ws     *websocket.Conn
+	sendMu sync.Mutex
 }
 
 // pendingCallback handles async response waiting
 type pendingCallback struct {
-	client  *clientWS
-	method  string
-	onResult func(result interface{}, errMsg string)
+	client    *clientWS
+	method    string
+	onResult  func(result interface{}, errMsg string)
 }
 
+// newPendingCallback is only used by tests (excluded from lint)
+//nolint:unused
 func newPendingCallback(client *clientWS, method string, onResult func(result interface{}, errMsg string)) *pendingCallback {
 	return &pendingCallback{client: client, method: method, onResult: onResult}
 }
@@ -71,8 +72,7 @@ type CdpServer struct {
 }
 
 type clientWS struct {
-	ws    *websocket.Conn
-	sendMu sync.Mutex
+	ws *websocket.Conn
 }
 
 type tabSet map[int]bool
@@ -151,13 +151,13 @@ func (s *CdpServer) handleExtension(w http.ResponseWriter, r *http.Request) {
 func (s *CdpServer) readLoopExt(extWS *extensionWS) {
 	defer func() {
 		s.onExtensionClose(extWS)
-		extWS.ws.Close()
+		_ = extWS.ws.Close()
 	}()
 
 	extWS.ws.SetReadLimit(MaxMessageSize)
-	extWS.ws.SetReadDeadline(time.Now().Add(PongWait))
+	_ = extWS.ws.SetReadDeadline(time.Now().Add(PongWait))
 	extWS.ws.SetPongHandler(func(string) error {
-		extWS.ws.SetReadDeadline(time.Now().Add(PongWait))
+		_ = extWS.ws.SetReadDeadline(time.Now().Add(PongWait))
 		return nil
 	})
 
@@ -285,8 +285,8 @@ func (s *CdpServer) handleCdpClient(w http.ResponseWriter, r *http.Request) {
 	if s.secret != "" && !s.checkAuth(r) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err == nil {
-			conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(4401, "Unauthorized"))
-			conn.Close()
+			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(4401, "Unauthorized"))
+			_ = conn.Close()
 		}
 		return
 	}
@@ -306,13 +306,13 @@ func (s *CdpServer) handleCdpClient(w http.ResponseWriter, r *http.Request) {
 func (s *CdpServer) readClientLoop(client *clientWS) {
 	defer func() {
 		delete(s.clientTabs, client)
-		client.ws.Close()
+		_ = client.ws.Close()
 	}()
 
 	client.ws.SetReadLimit(MaxMessageSize)
-	client.ws.SetReadDeadline(time.Now().Add(PongWait))
+	_ = client.ws.SetReadDeadline(time.Now().Add(PongWait))
 	client.ws.SetPongHandler(func(string) error {
-		client.ws.SetReadDeadline(time.Now().Add(PongWait))
+		_ = client.ws.SetReadDeadline(time.Now().Add(PongWait))
 		return nil
 	})
 
@@ -685,16 +685,16 @@ func (s *CdpServer) sendToExtension(extWS *extensionWS, msg interface{}) {
 	}
 	extWS.sendMu.Lock()
 	defer extWS.sendMu.Unlock()
-	extWS.ws.SetWriteDeadline(time.Now().Add(WriteWait))
-	extWS.ws.WriteJSON(msg)
+	_ = extWS.ws.SetWriteDeadline(time.Now().Add(WriteWait))
+	_ = extWS.ws.WriteJSON(msg)
 }
 
 func (s *CdpServer) writeJson(conn *websocket.Conn, v interface{}) {
 	if conn == nil {
 		return
 	}
-	conn.SetWriteDeadline(time.Now().Add(WriteWait))
-	conn.WriteJSON(v)
+	_ = conn.SetWriteDeadline(time.Now().Add(WriteWait))
+	_ = conn.WriteJSON(v)
 }
 
 func (s *CdpServer) checkAuth(r *http.Request) bool {
