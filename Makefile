@@ -36,7 +36,21 @@ uninstall:
 start:
 	@case "$(OS)" in \
 		Linux*)  sudo systemctl start browserctl-svc && echo "browserctl-svc started" ;; \
-		Darwin*) launchctl load ~/Library/LaunchAgents/com.browserctl.svc.plist && echo "browserctl-svc started" ;; \
+		Darwin*) \
+			PID=$$(launchctl list com.browserctl.svc 2>/dev/null | grep -o '"PID" = [0-9]*' | grep -o '[0-9]*'); \
+			if [ -n "$$PID" ] && [ "$$PID" != "0" ]; then \
+				echo "browserctl-svc already running (PID: $$PID)"; \
+			else \
+				launchctl load ~/Library/LaunchAgents/com.browserctl.svc.plist 2>/dev/null; \
+				sleep 1; \
+				PID=$$(launchctl list com.browserctl.svc 2>/dev/null | grep -o '"PID" = [0-9]*' | grep -o '[0-9]*'); \
+				if [ -n "$$PID" ] && [ "$$PID" != "0" ]; then \
+					echo "browserctl-svc started"; \
+				else \
+					echo "browserctl-svc failed to start (port in use?)"; \
+				fi \
+			fi \
+			;; \
 		*)       echo "Unsupported OS: $(OS)" >&2; exit 1 ;; \
 	esac
 

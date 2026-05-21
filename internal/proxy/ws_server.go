@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -108,8 +109,12 @@ func (s *CdpServer) Start() error {
 		s.logger.Info("CDP server listening", "port", s.port)
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("CDP server error", "err", err)
+			os.Exit(1)
 		}
 	}()
+
+	// Wait briefly to check if the server started successfully
+	time.Sleep(100 * time.Millisecond)
 
 	return nil
 }

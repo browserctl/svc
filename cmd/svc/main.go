@@ -1,8 +1,10 @@
 package main
 
 import (
+	stdhttp "net/http"
+
 	"browserctl/svc/internal/chrome"
-	"browserctl/svc/internal/http"
+	browserhttp "browserctl/svc/internal/http"
 	"browserctl/svc/internal/proxy"
 	"log/slog"
 	"os"
@@ -102,15 +104,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpSrv := http.NewServer(cfg.HttpPort, cfg.SvcPort, func() map[string]interface{} {
+	httpSrv := browserhttp.NewServer(cfg.HttpPort, cfg.SvcPort, func() map[string]interface{} {
 		return cdpServer.GetStatus()
 	})
 
 	go func() {
 		srv := httpSrv.Serve()
 		logger.Info("http server listening on :" + strconv.Itoa(cfg.HttpPort))
-		if err := srv.ListenAndServe(); err != nil {
+		if err := srv.ListenAndServe(); err != nil && err != stdhttp.ErrServerClosed {
 			logger.Error("http server error", "err", err)
+			os.Exit(1)
 		}
 	}()
 

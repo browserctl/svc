@@ -45,8 +45,10 @@ if command -v launchctl &>/dev/null; then
 </plist>
 EOF
 
-  launchctl load "$PLIST_PATH"
-  echo "Service installed and loaded. Run 'make start' to start it."
+  # Unload first if already loaded (to handle re-install)
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  launchctl load "$PLIST_PATH" 2>/dev/null
+  echo "Service installed. Run 'make start' to start it."
 else
   echo "launchctl not found, skipping service installation."
 fi
