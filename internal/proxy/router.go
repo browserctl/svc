@@ -102,21 +102,39 @@ func (r *Router) rebuildDomainMap() {
 	r.domainToWindow = make(map[string]int)
 }
 
-// ParseSessionId parses "cs-<tabId>" → tabId
-func ParseSessionId(sessionId string) int {
-	if len(sessionId) < 3 || sessionId[:3] != "cs-" {
+// ParseSessionId parses target/session IDs from various formats:
+//   - "cs-<tabId>" (chrome-use session format) → tabId
+//   - "tab-<tabId>" (browserctl tab format) → tabId
+//   - raw numeric string "123" → tabId
+func ParseSessionId(id string) int {
+	if id == "" {
 		return 0
 	}
-	var tabId int
-	for _, c := range sessionId[3:] {
-		if c == '-' {
-			break
+	// Handle "cs-<tabId>" format
+	if strings.HasPrefix(id, "cs-") {
+		rest := id[3:]
+		if idx := strings.IndexByte(rest, '-'); idx >= 0 {
+			rest = rest[:idx]
 		}
-		if c >= '0' && c <= '9' {
-			tabId = tabId*10 + int(c-'0')
+		if n, err := strconv.Atoi(rest); err == nil {
+			return n
 		}
 	}
-	return tabId
+	// Handle "tab-<tabId>" format
+	if strings.HasPrefix(id, "tab-") {
+		rest := id[4:]
+		if idx := strings.IndexByte(rest, '-'); idx >= 0 {
+			rest = rest[:idx]
+		}
+		if n, err := strconv.Atoi(rest); err == nil {
+			return n
+		}
+	}
+	// Handle raw numeric string
+	if n, err := strconv.Atoi(id); err == nil {
+		return n
+	}
+	return 0
 }
 
 func extractDomain(url string) string {

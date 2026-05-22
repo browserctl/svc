@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -40,9 +41,23 @@ type extensionWS struct {
 
 // pendingCallback handles async response waiting
 type pendingCallback struct {
+	id        int64
 	client    *clientWS
 	method    string
 	onResult  func(result interface{}, errMsg string)
+	handled   bool // true when result was sent via handleCdpResult
+	handledMu sync.Mutex
+}
+
+// tryMarkHandled atomically marks this callback as already-handled (by handleCdpResult)
+func (p *pendingCallback) tryMarkHandled() bool {
+	p.handledMu.Lock()
+	defer p.handledMu.Unlock()
+	if p.handled {
+		return false // already handled
+	}
+	p.handled = true
+	return true
 }
 
 // newPendingCallback is only used by tests (excluded from lint)
@@ -100,23 +115,45 @@ func (s *CdpServer) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleWS)
 
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	// Update Addr with the actual bound port (especially important when port=0)
 	s.httpServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", s.port),
+		Addr:    ln.Addr().String(),
 		Handler: mux,
 	}
 
 	go func() {
 		s.logger.Info("CDP server listening", "port", s.port)
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("CDP server error", "err", err)
 			os.Exit(1)
 		}
 	}()
 
-	// Wait briefly to check if the server started successfully
-	time.Sleep(100 * time.Millisecond)
-
 	return nil
+}
+
+// Port returns the actual TCP port the server is listening on.
+// Useful when Start() is called with port=0 (random port assignment).
+func (s *CdpServer) Port() int {
+	if s.httpServer == nil {
+		return s.port
+	}
+	addr := s.httpServer.Addr
+	if addr == "" {
+		return s.port
+	}
+	// addr is ":8080" or "127.0.0.1:8080"
+	if idx := strings.LastIndexByte(addr, ':'); idx >= 0 {
+		if p, err := strconv.Atoi(addr[idx+1:]); err == nil {
+			return p
+		}
+	}
+	return s.port
 }
 
 func (s *CdpServer) Stop() error {
@@ -191,6 +228,7 @@ func (s *CdpServer) onExtensionClose(extWS *extensionWS) {
 }
 
 func (s *CdpServer) handleExtMessage(extWS *extensionWS, data []byte) {
+	fmt.Fprintf(os.Stderr, "[DEBUG] handleExtMessage: %s\n", string(data))
 	var base struct {
 		Type string `json:"type"`
 		ID   int64  `json:"id"`
@@ -240,17 +278,6 @@ func (s *CdpServer) handleExtMessage(extWS *extensionWS, data []byte) {
 	}
 }
 
-func (s *CdpServer) resolvePending(id int64, result interface{}, errMsg string) {
-	s.mu.Lock()
-	pcb, ok := s.pending[id]
-	delete(s.pending, id)
-	s.mu.Unlock()
-
-	if ok && pcb != nil && pcb.onResult != nil {
-		pcb.onResult(result, errMsg)
-	}
-}
-
 func (s *CdpServer) onTabsList(tabs []Tab) {
 	s.router.UpdateTabs(tabs)
 	s.cachedTabs = tabs
@@ -258,29 +285,31 @@ func (s *CdpServer) onTabsList(tabs []Tab) {
 
 func (s *CdpServer) handleCdpResult(data []byte) {
 	var base struct {
-		ID     int64  `json:"id"`
-		Result interface{} `json:"result,omitempty"`
-		Error  interface{} `json:"error,omitempty"`
+		ID     int64           `json:"id"`
+		Result interface{}     `json:"result,omitempty"`
+		Error  interface{}     `json:"error,omitempty"`
 	}
 	if json.Unmarshal(data, &base) != nil || base.ID == 0 {
 		return
 	}
 
+	var errMsg string
+	if base.Error != nil {
+		errMsg = fmt.Sprintf("%v", base.Error)
+	}
+	s.resolvePending(base.ID, base.Result, errMsg)
+}
+
+func (s *CdpServer) resolvePending(id int64, result interface{}, errMsg string) {
 	s.mu.Lock()
-	pcb, ok := s.pending[base.ID]
-	delete(s.pending, base.ID)
+	pcb, ok := s.pending[id]
+	delete(s.pending, id)
 	s.mu.Unlock()
 
-	if !ok {
-		return
-	}
-
-	if pcb != nil && pcb.client != nil && pcb.client.ws != nil {
-		var err *RpcError
-		if base.Error != nil {
-			err = &RpcError{Code: -32000, Message: fmt.Sprintf("%v", base.Error)}
+	if ok && pcb != nil && pcb.onResult != nil {
+		if pcb.tryMarkHandled() {
+			pcb.onResult(result, errMsg)
 		}
-		s.writeJson(pcb.client.ws, JsonRpcResponse{ID: base.ID, Result: base.Result, Error: err})
 	}
 }
 
@@ -481,13 +510,13 @@ func (s *CdpServer) dispatchCdpCommand(client *clientWS, req *JsonRpcRequest) {
 		}
 
 		// New tab
-		tab, err := s.awaitNewTab(url)
-		if err != nil || tab == nil {
+		tabId, err := s.awaitNewTab(url)
+		if err != nil || tabId == 0 {
 			s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: "new_tab failed"}})
 			return
 		}
 
-		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: map[string]string{"sessionId": "cs-" + strconv.Itoa(tab.ID)}})
+		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: map[string]string{"targetId": "tab-" + strconv.Itoa(tabId)}})
 		return
 
 	case "Target.closeTarget":
@@ -552,10 +581,32 @@ func (s *CdpServer) dispatchCdpCommand(client *clientWS, req *JsonRpcRequest) {
 	}
 
 	reqId := s._nextId()
+	resultCh := make(chan json.RawMessage, 1)
+	errCh := make(chan error, 1)
+
 	s.mu.Lock()
-	s.pending[reqId] = &pendingCallback{client: client, method: method, onResult: func(result interface{}, errMsg string) {
-		// fire-and-forget: result comes back via handleCdpResult
-	}}
+	// Create callback first, then set onResult separately to avoid reference cycle
+	pcb := &pendingCallback{id: reqId, client: client, method: method}
+	pcb.onResult = func(result interface{}, errMsg string) {
+		if !pcb.tryMarkHandled() {
+			return // already handled by handleCdpResult
+		}
+		if errMsg != "" {
+			select { case errCh <- fmt.Errorf("%s", errMsg): default: }
+			return
+		}
+		if raw, ok := result.(json.RawMessage); ok {
+			select { case resultCh <- raw: default: }
+		} else {
+			data, merr := json.Marshal(result)
+			if merr != nil {
+				select { case errCh <- fmt.Errorf("marshal result: %w", merr): default: }
+				return
+			}
+			select { case resultCh <- data: default: }
+		}
+	}
+	s.pending[reqId] = pcb
 	s.mu.Unlock()
 
 	s.sendToExtension(extWS, map[string]interface{}{
@@ -565,7 +616,15 @@ func (s *CdpServer) dispatchCdpCommand(client *clientWS, req *JsonRpcRequest) {
 		"params": params,
 		"id":     reqId,
 	})
-	s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: map[string]interface{}{}})
+
+	select {
+	case <-time.After(30 * time.Second):
+		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: "timeout"}})
+	case result := <-resultCh:
+		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: result})
+	case err := <-errCh:
+		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: err.Error()}})
+	}
 }
 
 // ─── Await helpers ─────────────────────────────────────────────────────────
@@ -595,13 +654,22 @@ func (s *CdpServer) awaitTabAttach(tabId int) (bool, error) {
 	s.pending[reqId] = &pendingCallback{
 		onResult: func(result interface{}, errMsg string) {
 			if errMsg != "" {
-				errCh <- fmt.Errorf("%s", errMsg)
+				select {
+				case errCh <- fmt.Errorf("%s", errMsg):
+				default:
+				}
 				return
 			}
 			if b, ok := result.(bool); ok {
-				resultCh <- b
+				select {
+				case resultCh <- b:
+				default:
+				}
 			} else {
-				errCh <- fmt.Errorf("unexpected result type")
+				select {
+				case errCh <- fmt.Errorf("unexpected result type"):
+				default:
+				}
 			}
 		},
 	}
@@ -619,43 +687,36 @@ func (s *CdpServer) awaitTabAttach(tabId int) (bool, error) {
 	}
 }
 
-func (s *CdpServer) awaitNewTab(url string) (*Tab, error) {
+func (s *CdpServer) awaitNewTab(url string) (int, error) {
 	extWS := s.router.GetFirstWindow()
 	if extWS == nil {
-		return nil, fmt.Errorf("no extension connected")
+		return 0, fmt.Errorf("no extension connected")
 	}
 
 	reqId := s._nextId()
-	resultCh := make(chan *Tab, 1)
+	resultCh := make(chan int, 1)
 	errCh := make(chan error, 1)
 
 	s.mu.Lock()
 	s.pending[reqId] = &pendingCallback{
 		onResult: func(result interface{}, errMsg string) {
 			if errMsg != "" {
-				errCh <- fmt.Errorf("%s", errMsg)
+				select { case errCh <- fmt.Errorf("%s", errMsg): default: }
 				return
 			}
-			if tab, ok := result.(*Tab); ok && tab != nil {
-				resultCh <- tab
-				return
-			}
-			// Might be a map
+			// Extension sends tab object with id (float64)
 			if m, ok := result.(map[string]interface{}); ok {
-				tab := &Tab{}
 				if id, ok := m["id"].(float64); ok {
-					tab.ID = int(id)
+					select { case resultCh <- int(id): default: }
+					return
 				}
-				if title, ok := m["title"].(string); ok {
-					tab.Title = title
-				}
-				if u, ok := m["url"].(string); ok {
-					tab.URL = u
-				}
-				resultCh <- tab
+			}
+			// Fallback: result might be tabId as float64
+			if n, ok := result.(float64); ok {
+				select { case resultCh <- int(n): default: }
 				return
 			}
-			errCh <- fmt.Errorf("invalid result")
+			select { case errCh <- fmt.Errorf("invalid result"): default: }
 		},
 	}
 	s.mu.Unlock()
@@ -664,11 +725,11 @@ func (s *CdpServer) awaitNewTab(url string) (*Tab, error) {
 
 	select {
 	case <-time.After(30 * time.Second):
-		return nil, fmt.Errorf("timeout")
-	case tab := <-resultCh:
-		return tab, nil
+		return 0, fmt.Errorf("timeout")
+	case tabId := <-resultCh:
+		return tabId, nil
 	case err := <-errCh:
-		return nil, err
+		return 0, err
 	}
 }
 

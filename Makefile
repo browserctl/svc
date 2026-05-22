@@ -42,12 +42,18 @@ start:
 				echo "browserctl-svc already running (PID: $$PID)"; \
 			else \
 				launchctl load ~/Library/LaunchAgents/com.browserctl.svc.plist 2>/dev/null; \
-				sleep 1; \
+				sleep 2; \
 				PID=$$(launchctl list com.browserctl.svc 2>/dev/null | grep -o '"PID" = [0-9]*' | grep -o '[0-9]*'); \
 				if [ -n "$$PID" ] && [ "$$PID" != "0" ]; then \
 					echo "browserctl-svc started"; \
 				else \
-					echo "browserctl-svc failed to start (port in use?)"; \
+					if grep -q "address already in use" /tmp/browserctl-svc.log 2>/dev/null; then \
+						echo "browserctl-svc failed: ports in use"; \
+						echo "Process using ports:"; \
+						lsof -i :9222 -i :9223 2>/dev/null | head -5; \
+					else \
+						echo "browserctl-svc failed to start (check logs: tail -f /tmp/browserctl-svc.log)"; \
+					fi \
 				fi \
 			fi \
 			;; \

@@ -25,7 +25,8 @@ func TestParseSessionId(t *testing.T) {
 		{"basic", "cs-123", 123},
 		{"large", "cs-99999", 99999},
 		{"with_extra_dash", "cs-456-extra", 456},
-		{"invalid_prefix", "tab-123", 0},
+		{"tab_prefix", "tab-123", 123},
+		{"tab_with_extra", "tab-456-extra", 456},
 		{"empty", "", 0},
 		{"cs_only", "cs-", 0},
 		{"no_dash", "cs123", 0},
@@ -303,7 +304,7 @@ func TestTabIdFromTargetId(t *testing.T) {
 		{"cs-1", 1},
 		{"cs-99999", 99999},
 		{"cs-123-extra", 123},
-		{"tab-123", 0},
+		{"tab-123", 123},
 		{"", 0},
 	}
 	for _, tt := range tests {
