@@ -278,17 +278,6 @@ func (s *CdpServer) handleExtMessage(extWS *extensionWS, data []byte) {
 	}
 }
 
-func (s *CdpServer) resolvePending(id int64, result interface{}, errMsg string) {
-	s.mu.Lock()
-	pcb, ok := s.pending[id]
-	delete(s.pending, id)
-	s.mu.Unlock()
-
-	if ok && pcb != nil && pcb.onResult != nil {
-		pcb.onResult(result, errMsg)
-	}
-}
-
 func (s *CdpServer) onTabsList(tabs []Tab) {
 	s.router.UpdateTabs(tabs)
 	s.cachedTabs = tabs
