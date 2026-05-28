@@ -9,27 +9,32 @@ Connects to a real Chrome browser running on the local machine via Chrome DevToo
 ## What it does
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      browserctl-svc                        │
-│                                                             │
-│  HTTP API                    Chrome Provider                │
-│  ┌──────────────┐           ┌─────────────────────┐        │
-│  │ /sessions    │           │  CDP ReadLoop        │──────▶ │
-│  │ /navigate    │──────────▶│  Event Writer        │        │
-│  │ /click       │           │  (→ disk)            │        │
-│  │ /evaluate    │           └─────────────────────┘        │
-│  │ /screenshot  │                                          │
-│  │ /intercept   │           CDP                             │
-│  │ /requests    │◀────────────── WebSocket ──────────────▶  │
-│  └──────────────┘           Chrome                          │
-│                                                             │
-│  ~/.browserctl/                                            │
-│  ├── sessions/{id}/meta.json                              │
-│  └── events/{id}/intercepted/*.jsonl                      │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      browserctl-svc                          │
+│                                                              │
+│   HTTP API                      Chrome Provider               │
+│   ┌──────────────┐            ┌──────────────────────┐      │
+│   │ /sessions     │            │  CDP ReadLoop         │─────▶│
+│   │ /tabs         │───────────▶│  Event Writer         │      │
+│   │ /navigate     │            │  (→ disk)             │      │
+│   │ /click        │            └──────────────────────┘      │
+│   │ /type         │                                            │
+│   │ /scroll       │            CDP                             │
+│   │ /hover       │◀──────────── WebSocket ──────────────▶   │
+│   │ /evaluate    │            Chrome                           │
+│   │ /waitForSelector           │
+│   │ /screenshot  │                                            │
+│   │ /intercept   │                                            │
+│   │ /requests    │                                            │
+│   └──────────────┘                                            │
+│                                                              │
+│   ~/.browserctl/                                             │
+│   ├── sessions/{id}/meta.json                               │
+│   └── events/{id}/intercepted/*.jsonl                       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Client** (CLI, AI agent SDK, or any HTTP client) talks to svc over plain HTTP. svc manages the Chrome connection, executes browser actions, and writes intercepted network events to disk. client pulls at its own pace.
+**Client** (CLI, AI agent SDK, or any HTTP client) talks to svc over plain HTTP. svc manages the Chrome connection, executes browser actions, and writes intercepted network events to disk. Client pulls at its own pace.
 
 ---
 
@@ -141,14 +146,15 @@ Response:
 
 ### Page Actions (synchronous)
 
-| Method | Path | Description |
+|| Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/sessions/:id/tabs/:tabId/navigate` | Navigate to URL |
+| `POST` | `/sessions/:id/tabs/:tabId/hover` | Hover over element |
 | `POST` | `/sessions/:id/tabs/:tabId/click` | Click element |
 | `POST` | `/sessions/:id/tabs/:tabId/type` | Type text |
 | `POST` | `/sessions/:id/tabs/:tabId/scroll` | Scroll page |
 | `POST` | `/sessions/:id/tabs/:tabId/evaluate` | Execute JavaScript |
-| `POST` | `/sessions/:id/tabs/:tabId/wait` | Wait for condition |
+| `POST` | `/sessions/:id/tabs/:tabId/waitForSelector` | Wait for element |
 
 **navigate** — `POST /sessions/:id/tabs/:tabId/navigate`
 ```json
@@ -165,6 +171,12 @@ Response:
 { "selector": "input[name=email]", "value": "hello@example.com" }
 ```
 
+**hover** — `POST /sessions/:id/tabs/:tabId/hover`
+```json
+{ "selector": "a.dropdown-toggle" }
+```
+Triggers `mouseenter` / `mouseover` events. Useful for revealing dropdowns, tooltips, or lazy-loaded content.
+
 **scroll** — `POST /sessions/:id/tabs/:tabId/scroll`
 ```json
 { "y": 500, "x": 0 }
@@ -177,10 +189,11 @@ Scrolls the page by the given pixel offset. Use positive `y` to scroll down, neg
 ```
 response: `{ "result": "Page Title" }`
 
-**wait** — `POST /sessions/:id/tabs/:tabId/wait`
+**waitForSelector** — `POST /sessions/:id/tabs/:tabId/waitForSelector`
 ```json
-{ "condition": "networkidle", "timeout": 15000 }
+{ "selector": ".chapter-detail-article p", "state": "visible", "timeout": 10000 }
 ```
+Wait for a CSS selector to reach a desired state (`visible`, `hidden`, `attached`, `detached`). Returns `{ "found": true }` or HTTP 504 on timeout.
 
 ---
 
@@ -303,11 +316,12 @@ type BackendProvider interface {
 
     // Page actions
     Navigate(ctx context.Context, tabId, url string, opts *NavigateOptions) error
+    Hover(ctx context.Context, tabId, selector string) error
     Click(ctx context.Context, tabId, selector string) error
     Type(ctx context.Context, tabId, selector, text string) error
     Scroll(ctx context.Context, tabId string, x, y int) error
     Evaluate(ctx context.Context, tabId, script string) (interface{}, error)
-    Wait(ctx context.Context, tabId string, cond WaitCondition) error
+    WaitForSelector(ctx context.Context, tabId, selector string, state string, timeoutms int) error
 
     // Page state
     Screenshot(ctx context.Context, tabId string) ([]byte, error)
@@ -323,9 +337,9 @@ type BackendProvider interface {
 
 ## Implementation Phases
 
-| Phase | Scope |
+|| Phase | Scope |
 |-------|-------|
-| **Phase 1** | Session lifecycle, navigate, click, type, scroll, evaluate, wait, screenshot, dom |
+| **Phase 1** | Session lifecycle, navigate, hover, click, type, scroll, evaluate, waitForSelector, screenshot, dom |
 | **Phase 2** | Network interception (intercept, pull merged requests) |
 | **Phase 3** | Session persistence across svc restarts |
 | **Phase 4** | ExtensionBackend (production Chrome connection via browserctl extension) |
