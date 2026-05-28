@@ -8,33 +8,85 @@ Connects to a real Chrome browser running on the local machine via Chrome DevToo
 
 ## What it does
 
+### Request handling path
+
+All HTTP requests are handled by svc and dispatched through BackendProvider to the browser. The client never touches Chrome directly.
+
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                      browserctl-svc                          │
-│                                                              │
-│   HTTP API                      Chrome Provider               │
-│   ┌──────────────┐            ┌──────────────────────┐      │
-│   │ /sessions     │            │  CDP ReadLoop         │─────▶│
-│   │ /tabs         │───────────▶│  Event Writer         │      │
-│   │ /navigate     │            │  (→ disk)             │      │
-│   │ /click        │            └──────────────────────┘      │
-│   │ /type         │                                            │
-│   │ /scroll       │            CDP                             │
-│   │ /hover       │◀──────────── WebSocket ──────────────▶   │
-│   │ /evaluate    │            Chrome                           │
-│   │ /waitForSelector           │
-│   │ /screenshot  │                                            │
-│   │ /intercept   │                                            │
-│   │ /requests    │                                            │
-│   └──────────────┘                                            │
-│                                                              │
-│   ~/.browserctl/                                             │
-│   ├── sessions/{id}/meta.json                               │
-│   └── events/{id}/intercepted/*.jsonl                       │
-└──────────────────────────────────────────────────────────────┘
+svc 进程
+┌─────────────────────────────────────────────────────────────┐
+│  HTTP Server                                                 │
+│  ─────────────────────────────────────────────────────────  │
+│  POST /sessions         →  SessionHandler.Create            │
+│  GET  /sessions/:id     →  SessionHandler.Get              │
+│  DELETE /sessions/:id   →  SessionHandler.Delete            │
+│  GET  /sessions/:id/tabs →  TabHandler.List                 │
+│  POST /sessions/:id/tabs →  TabHandler.Create               │
+│  POST /sessions/:id/tabs/:tabId/navigate →  PageHandler     │
+│  POST /sessions/:id/tabs/:tabId/hover    →  PageHandler     │
+│  POST /sessions/:id/tabs/:tabId/click    →  PageHandler     │
+│  POST /sessions/:id/tabs/:tabId/type     →  PageHandler     │
+│  POST /sessions/:id/tabs/:tabId/scroll   →  PageHandler     │
+│  POST /sessions/:id/tabs/:tabId/evaluate →  PageHandler     │
+│  POST .../waitForSelector                →  PageHandler     │
+│  GET  /sessions/:id/tabs/:tabId/screenshot → PageHandler   │
+│  GET  /sessions/:id/tabs/:tabId/dom       → PageHandler   │
+│  POST /sessions/:id/intercept  →  InterceptHandler          │
+│  GET  /sessions/:id/tabs/:tabId/requests → InterceptHandler│
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│  BackendProvider (interface)                                 │
+│  ─────────────────────────────────────────────────────────  │
+│  Connect / Close / NewSession / CloseSession / ListTabs     │
+│  Navigate / Hover / Click / Type / Scroll / Evaluate        │
+│  WaitForSelector / Screenshot / GetDOM                      │
+│  SetIntercept / GetRequests                                 │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ implements
+            ┌───────────────┴───────────────┐
+            ▼                             ▼
+┌───────────────────────┐     ┌───────────────────────┐
+│  DirectCDPBackend     │     │  ExtensionBackend     │
+│  Phase 1             │     │  Phase 4 (future)    │
+│  HTTP /json → tab WS │     │                       │
+│  CDP commands → WS   │     │                       │
+└───────────┬──────────┘     └───────────────────────┘
+            │ CDP WebSocket
+            ▼
+      ┌──────────┐
+      │  Chrome  │
+      └──────────┘
 ```
 
-**Client** (CLI, AI agent SDK, or any HTTP client) talks to svc over plain HTTP. svc manages the Chrome connection, executes browser actions, and writes intercepted network events to disk. Client pulls at its own pace.
+### Event listener path (async)
+
+A separate goroutine in DirectCDPBackend listens for CDP events on each tab WebSocket. Matching events are written to disk. This is entirely independent of the request path.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  DirectCDPBackend.ReadLoop (goroutine, per tab)           │
+│  ───────────────────────────────────────────────────────── │
+│  tab WS ◄─────────────────────────────────────────────── │
+│    │                                                       │
+│    │ on Fetch.requestPaused                                │
+│    │ on Network.requestWillBeSent                        │
+│    │ on Network.responseReceived                          │
+│    │ on Network.loadingFinished                           │
+│    │ on Fetch.authRequired                                │
+│    ▼                                                       │
+│  PatternMatcher (matches against session.interceptPatterns)│
+│    │                                                       │
+│    │ matched                                              │
+│    ▼                                                       │
+│  EventWriter.append(line + "\n")                          │
+│    ~/.browserctl/events/{session_id}/intercepted/         │
+│                0000000000.jsonl                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Client** talks to svc over plain HTTP — no WebSocket required. Client pulls intercepted events at its own pace.
 
 ---
 
