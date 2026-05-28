@@ -274,6 +274,35 @@ curl -X POST http://localhost:9222/sessions/s_abc123def/tabs/tab_1/type \
 
 ---
 
+### `POST /sessions/:id/tabs/:tabId/hover`
+
+Moves the mouse cursor over an element identified by a CSS selector. Triggers `mouseenter` / `mouseover` events — useful for revealing dropdowns, tooltips, or lazy-loaded content.
+
+```bash
+curl -X POST http://localhost:9222/sessions/s_abc123def/tabs/tab_1/hover \
+  -H "Content-Type: application/json" \
+  -d '{"selector": "a.dropdown-toggle"}'
+```
+
+```json
+// request
+{ "selector": "a.dropdown-toggle" }
+```
+
+```json
+// response 200
+{}
+```
+
+**Errors:**
+
+| Status | Condition |
+|--------|-----------|
+| 400 | Element not found |
+| 404 | Session or tab not found |
+
+---
+
 ### `POST /sessions/:id/tabs/:tabId/scroll`
 
 Scrolls the page by a pixel offset. Positive `y` scrolls down; negative `y` scrolls up.

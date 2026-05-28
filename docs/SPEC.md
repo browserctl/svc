@@ -153,11 +153,12 @@ No WebSocket from client. No streaming. No callbacks.
 | Action | Semantics |
 |--------|-----------|
 | `navigate` | CDP `Page.navigate`. Optionally wait for `domcontentloaded`/`load`/`networkidle`. |
+| `hover` | CDP `Runtime.evaluate` → `document.querySelector(selector).dispatchEvent(new MouseEvent('mouseenter'))`. |
 | `click` | CDP `Runtime.evaluate` → `document.querySelector(selector).click()`. Waits for element to be actionable. |
 | `type` | CDP `Runtime.evaluate` → focus + `insertText`. |
 | `scroll` | CDP `Input.synthesizeScrollGesture` or `Runtime.evaluate` → `scrollBy(x, y)`. |
 | `evaluate` | CDP `Runtime.evaluate`. Returns serialized JSON result. |
-| `wait` | CDP `Page.waitForNavigation` or `Runtime.waitForFunction`. |
+| `waitForSelector` | CDP `Runtime.waitForFunction` or `Page.waitForSelector`. Waits for element state. |
 
 All actions return HTTP 200 on success. Errors are returned as JSON:
 
@@ -299,7 +300,8 @@ type BackendProvider interface {
     Type(ctx context.Context, tabId, selector, text string) error
     Scroll(ctx context.Context, tabId string, x, y int) error
     Evaluate(ctx context.Context, tabId, script string) (interface{}, error)
-    Wait(ctx context.Context, tabId string, cond WaitCondition, timeoutms int) error
+    WaitForSelector(ctx context.Context, tabId, selector string, state string, timeoutms int) error
+    Hover(ctx context.Context, tabId, selector string) error
 
     // Page state
     Screenshot(ctx context.Context, tabId string) ([]byte, error)
