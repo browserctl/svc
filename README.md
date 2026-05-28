@@ -341,21 +341,21 @@ svc/
     │   └── bridge.go             # Chrome CDP connection helpers
     ├── http/
     │   └── server.go             # HTTP server, routing, middleware
-    ├── proxy/
-    │   ├── backend.go            # BackendProvider interface
-    │   ├── direct_cdp_backend.go # DirectCDPBackend implementation
-    │   ├── extension_backend.go  # ExtensionBackend (production, future)
-    │   ├── router.go             # Tab/window routing
-    │   └── types.go              # shared types: Tab, InterceptRule, etc.
-    └── scrape/
-        └── provider.go           # Phase 2+ (new architecture)
+    └── connector/
+        ├── connector.go          # Connector interface
+        ├── chrome_connector.go    # ChromeConnector (Phase 1)
+        ├── extension_connector.go # ExtensionConnector (Phase 4)
+        ├── types.go               # Session, Tab, InterceptedRequest
+        └── router.go              # Tab routing
 ```
 
-### BackendProvider interface
+### Connector interface
 
 ```go
-type BackendProvider interface {
+type Connector interface {
+    // Lifecycle
     Connect(ctx context.Context, cdpUrl string) error
+    Close(ctx context.Context) error
 
     // Session lifecycle
     NewSession(ctx context.Context) (*Session, error)
@@ -381,7 +381,7 @@ type BackendProvider interface {
 
     // Network interception
     SetIntercept(ctx context.Context, sessionId string, patterns []string) error
-    GetRequests(ctx context.Context, tabId string) ([]InterceptedRequest, error)
+    GetRequests(ctx context.Context, sessionId, tabId string) ([]InterceptedRequest, error)
 }
 ```
 

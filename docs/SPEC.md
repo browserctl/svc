@@ -269,19 +269,19 @@ svc/
     │   └── bridge.go           # Chrome CDP connection helpers
     ├── http/
     │   └── server.go           # HTTP router, middleware, handlers
-    └── proxy/
-        ├── backend.go          # BackendProvider interface
-        ├── direct_cdp_backend.go  # Phase 1: DirectCDPBackend implementation
-        ├── extension_backend.go   # Phase 4: ExtensionBackend
-        ├── router.go           # Tab routing
-        └── types.go            # Session, Tab, InterceptedRequest types
+    └── connector/
+        ├── connector.go        # Connector interface
+        ├── chrome_connector.go  # ChromeConnector implementation
+        ├── extension_connector.go # ExtensionConnector (Phase 4)
+        ├── types.go             # Session, Tab, InterceptedRequest types
+        └── router.go            # Tab routing
 ```
 
-### BackendProvider interface
+### Connector interface
 
 ```go
-type BackendProvider interface {
-    // Connect to browser
+type Connector interface {
+    // Lifecycle
     Connect(ctx context.Context, cdpUrl string) error
     Close(ctx context.Context) error
 
@@ -296,12 +296,12 @@ type BackendProvider interface {
 
     // Page actions
     Navigate(ctx context.Context, tabId, url string, opts *NavigateOptions) error
-    Click(ctx context.Context, tabId, selector string, timeoutms int) error
+    Hover(ctx context.Context, tabId, selector string) error
+    Click(ctx context.Context, tabId, selector string) error
     Type(ctx context.Context, tabId, selector, text string) error
     Scroll(ctx context.Context, tabId string, x, y int) error
     Evaluate(ctx context.Context, tabId, script string) (interface{}, error)
     WaitForSelector(ctx context.Context, tabId, selector string, state string, timeoutms int) error
-    Hover(ctx context.Context, tabId, selector string) error
 
     // Page state
     Screenshot(ctx context.Context, tabId string) ([]byte, error)
@@ -309,7 +309,7 @@ type BackendProvider interface {
 
     // Network interception
     SetIntercept(ctx context.Context, sessionId string, patterns []string) error
-    GetRequests(ctx context.Context, tabId string) ([]InterceptedRequest, error)
+    GetRequests(ctx context.Context, sessionId, tabId string) ([]InterceptedRequest, error)
 }
 ```
 
