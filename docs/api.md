@@ -1,6 +1,6 @@
 # HTTP API Specification
 
-All endpoints return `Content-Type: application/json`. Errors use the shape:
+All endpoints return `Content-Type: application/json` except `/screenshot` which returns `image/png`. Errors use the shape:
 
 ```json
 { "error": "human-readable message", "reason": "optional detail" }
@@ -103,7 +103,7 @@ curl http://localhost:9222/sessions/s_abc123def
 
 ### `DELETE /sessions/:id` — Close session
 
-Closes all tabs in the session, disconnects from Chrome (or leaves a launched Chrome running — svc does not kill browser processes launched in launch mode), and marks the session as closed.
+Closes all tabs in the session, disconnects from Chrome (svc does **not** kill browser processes it connects to — Chrome is left running with its user's profile, cookies, and extensions intact). Marks the session as closed.
 
 ```bash
 curl -X DELETE http://localhost:9222/sessions/s_abc123def

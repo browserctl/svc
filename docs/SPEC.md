@@ -97,7 +97,7 @@ Client                         svc                              Chrome
   │─── GET .../requests ───────→ │  Read from disk                 │
   │←─── { requests: [...] } ─── │                                 │
   │                             │                                 │
-  │─── DELETE /sessions/s_xxx ──→ │─── CDP close ──────────────────→│
+  │─── DELETE /sessions/s_xxx ──→ │─── disconnect CDP ────────────→│
   │←─── HTTP 200 OK ──────────── │ s_xxx.status = "closed"         │
 ```
 
