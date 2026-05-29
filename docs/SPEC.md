@@ -94,8 +94,8 @@ Client                         svc                              Chrome
   │                             │  svc records request+response     │
   │                             │  to ~/.browserctl/events/s_xxx/  │
   │                             │                                 │
-  │─── GET .../requests ───────→ │  Read from disk                 │
-  │←─── { requests: [...] } ─── │                                 │
+  │─── GET .../intercepted ──────→ │  Read one from disk             │
+  │←─── { request: {...} } ────── │  advance read position         │
   │                             │                                 │
   │─── DELETE /sessions/s_xxx ──→ │─── disconnect CDP ────────────→│
   │←─── HTTP 200 OK ──────────── │ s_xxx.status = "closed"         │

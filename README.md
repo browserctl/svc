@@ -32,7 +32,7 @@ svc 进程
 │  GET  /sessions/:id/tabs/:tabId/screenshot → PageHandler   │
 │  GET  /sessions/:id/tabs/:tabId/dom       → PageHandler   │
 │  POST /sessions/:id/intercept  →  InterceptHandler          │
-│  GET  /sessions/:id/tabs/:tabId/requests → InterceptHandler│
+│  GET  /sessions/:id/tabs/:tabId/intercepted → InterceptHandler│
 └───────────────────────────┬─────────────────────────────────┘
                             │
                             ▼
@@ -125,8 +125,8 @@ This preserves the user's signed-in session, cookies, and extensions — no head
 When intercept patterns are set, matching network requests and their responses are recorded to disk. **No intervention**: requests pass through Chrome normally, svc only observes.
 
 ```
-POST   /sessions/:id/intercept   → set URL patterns to monitor
-GET    /sessions/:id/tabs/:tabId/requests   → pull intercepted requests
+POST   /sessions/:id/intercept     → set URL patterns to monitor
+GET    /sessions/:id/tabs/:tabId/intercepted → read one event
 ```
 
 ### Page Actions (synchronous)
@@ -263,37 +263,19 @@ Wait for a CSS selector to reach a desired state (`visible`, `hidden`, `attached
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/sessions/:id/intercept` | Set URL monitoring patterns |
-| `GET` | `/sessions/:id/tabs/:tabId/requests` | Pull intercepted requests |
+| `GET` | `/sessions/:id/tabs/:tabId/intercepted` | Read one intercepted event |
 
 **intercept** — `POST /sessions/:id/intercept`
 ```json
 { "patterns": ["*doubleclick*", "*google-analytics*", "*facebook.net*"] }
 ```
 
-**GET /requests** response — request and response merged into one entry:
+**GET /intercepted** — reads one event from disk, advances read position:
 ```json
-{
-  "requests": [
-    {
-      "id": "req_001",
-      "tab_id": "tab_1",
-      "time": "2026-05-28T10:00:01Z",
-      "request": {
-        "url": "https://www.google-analytics.com/collect?v=1&...",
-        "method": "GET",
-        "headers": { "User-Agent": "..." }
-      },
-      "response": {
-        "status": 200,
-        "headers": { "Content-Type": "image/gif" },
-        "body_base64": "R0lGODlhAQABAIAAAAAAAP..."
-      }
-    }
-  ]
-}
+{ "request": { "id": "req_001", ... } }
 ```
 
-Each line in the event log file is one JSON object containing both request and response, written after the response is received.
+Returns `{ "request": null }` when the queue is empty. Read position is per-tab, persisted in `meta.json`.
 
 ---
 

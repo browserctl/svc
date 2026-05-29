@@ -44,11 +44,15 @@ Written on every state change (session create, close, tab add/remove, intercept 
   ],
   "active_tab": "tab_1",
   "intercept_patterns": ["*doubleclick*"],
-  "intercept_seq": 42
+  "intercept_write_seq": 42,
+  "intercept_read_seq": {
+    "tab_1": 38,
+    "tab_2": 0
+  }
 }
 ```
 
-`intercept_seq` tracks the highest sequence number written to the event file. It is updated after each successful write to disk.
+`intercept_write_seq` tracks the highest sequence number written to the event file. `intercept_read_seq` is a per-tab map tracking the next sequence to read — it advances by one on each `GET .../intercepted` call.
 
 ---
 

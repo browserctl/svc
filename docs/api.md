@@ -486,54 +486,50 @@ curl -X POST http://localhost:9222/sessions/s_abc123def/intercept \
 
 ---
 
-### `GET /sessions/:id/tabs/:tabId/requests` — Pull intercepted requests
+### `GET /sessions/:id/tabs/:tabId/intercepted` — Read one intercepted event
 
-Returns all intercepted request+response pairs for this tab since the session started or since intercept was last activated. Results are read from the event log file on disk and returned in chronological order.
+Reads one intercepted request+response pair from disk, advances the read position by one, and persists the new position to `meta.json`. Designed for sequential consumption — not for random access.
 
 ```bash
-curl http://localhost:9222/sessions/s_abc123def/tabs/tab_1/requests
+curl http://localhost:9222/sessions/s_abc123def/tabs/tab_1/intercepted
 ```
 
 ```json
-// response 200
+// response 200 — one event
 {
-  "requests": [
-    {
-      "id": "req_001",
-      "tab_id": "tab_1",
-      "time": "2026-05-28T10:00:01Z",
-      "request": {
-        "url": "https://www.google-analytics.com/collect?v=1&tid=UA-...",
-        "method": "GET",
-        "headers": {
-          "User-Agent": "Mozilla/5.0 ...",
-          "Referer": "https://example.com/"
-        }
-      },
-      "response": {
-        "status": 200,
-        "status_text": "OK",
-        "headers": {
-          "Content-Type": "image/gif",
-          "Cache-Control": "no-cache"
-        },
-        "body_base64": "R0lGODlhAQABAIAAAAAAAP..."
+  "request": {
+    "id": "req_001",
+    "tab_id": "tab_1",
+    "time": "2026-05-28T10:00:01Z",
+    "request": {
+      "url": "https://www.google-analytics.com/collect?v=1&tid=UA-...",
+      "method": "GET",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 ...",
+        "Referer": "https://example.com/"
       }
     },
-    {
-      "id": "req_002",
-      "tab_id": "tab_1",
-      "time": "2026-05-28T10:00:02Z",
-      "request": { "url": "...", "method": "POST", "headers": {...} },
-      "response": { "status": 204, "status_text": "No Content", "headers": {...}, "body_base64": "" }
+    "response": {
+      "status": 200,
+      "status_text": "OK",
+      "headers": {
+        "Content-Type": "image/gif",
+        "Cache-Control": "no-cache"
+      },
+      "body_base64": "R0lGODlhAQABAIAAAAAAAP..."
     }
-  ]
+  }
 }
 ```
 
-- `body_base64` is the **full** response body, base64-encoded. Empty string if no body.
-- Each call returns **all** intercepted requests since session start — client is responsible for deduplication if needed.
-- If interception is not active (`patterns` is empty), `requests` is an empty array.
+```json
+// response 200 — queue empty
+{ "request": null }
+```
+
+**Read position** is tracked per tab in `meta.json` under `intercept_read_seq`. Each successful read increments it atomically (write-then-rename). Multiple concurrent GET calls on the same tab are serialized via `sync.RWMutex` — each call consumes exactly one event.
+
+**If interception is not active**, returns `{ "request": null }`.
 
 ---
 
