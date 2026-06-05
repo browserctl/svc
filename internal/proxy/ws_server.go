@@ -41,10 +41,10 @@ type extensionWS struct {
 
 // pendingCallback handles async response waiting
 type pendingCallback struct {
-	id        int64
-	client    *clientWS
-	method    string
-	onResult  func(result interface{}, errMsg string)
+	_       int64   // formerly: id (used by ws_server.go)
+	_       *clientWS // formerly: client (used by ws_server.go)
+	_       string  // formerly: method (used by ws_server.go)
+	onResult func(result interface{}, errMsg string)
 	handled   bool // true when result was sent via handleCdpResult
 	handledMu sync.Mutex
 }
@@ -60,12 +60,6 @@ func (p *pendingCallback) tryMarkHandled() bool {
 	return true
 }
 
-// newPendingCallback is only used by tests (excluded from lint)
-//nolint:unused
-func newPendingCallback(client *clientWS, method string, onResult func(result interface{}, errMsg string)) *pendingCallback {
-	return &pendingCallback{client: client, method: method, onResult: onResult}
-}
-
 // CdpServer is the transparent CDP proxy.
 type CdpServer struct {
 	port       int
@@ -77,6 +71,8 @@ type CdpServer struct {
 	httpServer    *http.Server
 	extensionConn *extensionWS
 	startTime     time.Time
+
+	backend BackendProvider
 
 	pending map[int64]*pendingCallback
 	_nextSeq int64
@@ -108,6 +104,11 @@ func NewCdpServer(port int, secret string, logger *slog.Logger) *CdpServer {
 
 func (s *CdpServer) SetProfileDir(profileDir string) {
 	s.profileDir = profileDir
+}
+
+// SetBackend sets the CDP backend provider (ExtensionBackend or DirectCDPBackend).
+func (s *CdpServer) SetBackend(backend BackendProvider) {
+	s.backend = backend
 }
 
 // Start the WebSocket + HTTP server
@@ -228,7 +229,6 @@ func (s *CdpServer) onExtensionClose(extWS *extensionWS) {
 }
 
 func (s *CdpServer) handleExtMessage(extWS *extensionWS, data []byte) {
-	fmt.Fprintf(os.Stderr, "[DEBUG] handleExtMessage: %s\n", string(data))
 	var base struct {
 		Type string `json:"type"`
 		ID   int64  `json:"id"`
@@ -428,7 +428,11 @@ func (s *CdpServer) dispatchCdpCommand(client *clientWS, req *JsonRpcRequest) {
 
 	switch method {
 	case "Target.getTargets":
-		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: s.buildTargetList()})
+		var tabs []Tab
+		if s.backend != nil {
+			tabs = s.backend.Tabs()
+		}
+		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: s.buildTargetList(tabs)})
 		return
 
 	case "Target.setDiscoverTargets":
@@ -562,69 +566,38 @@ func (s *CdpServer) dispatchCdpCommand(client *clientWS, req *JsonRpcRequest) {
 		return
 	}
 
-	// Generic CDP command — requires session
+	// Generic CDP command — uses backend
 	if tabId == 0 {
-		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32602, Message: "session required"}})
-		return
-	}
-
-	extWS := s.router.GetWindowForTab(tabId)
-	if extWS == nil {
-		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: "tab not found"}})
-		return
-	}
-
-	// Strip domain prefix: "Runtime.evaluate" → "evaluate"
-	methodName := method
-	if idx := strings.LastIndex(method, "."); idx >= 0 {
-		methodName = method[idx+1:]
-	}
-
-	reqId := s._nextId()
-	resultCh := make(chan json.RawMessage, 1)
-	errCh := make(chan error, 1)
-
-	s.mu.Lock()
-	// Create callback first, then set onResult separately to avoid reference cycle
-	pcb := &pendingCallback{id: reqId, client: client, method: method}
-	pcb.onResult = func(result interface{}, errMsg string) {
-		if !pcb.tryMarkHandled() {
-			return // already handled by handleCdpResult
+		// direct backend: use first available tab
+		if s.backend != nil {
+			if tabs := s.backend.Tabs(); len(tabs) > 0 {
+				tabId = tabs[0].ID
+			}
 		}
-		if errMsg != "" {
-			select { case errCh <- fmt.Errorf("%s", errMsg): default: }
+		// still 0: session required
+		if tabId == 0 {
+			s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32602, Message: "session required"}})
 			return
 		}
-		if raw, ok := result.(json.RawMessage); ok {
-			select { case resultCh <- raw: default: }
-		} else {
-			data, merr := json.Marshal(result)
-			if merr != nil {
-				select { case errCh <- fmt.Errorf("marshal result: %w", merr): default: }
-				return
-			}
-			select { case resultCh <- data: default: }
-		}
 	}
-	s.pending[reqId] = pcb
-	s.mu.Unlock()
 
-	s.sendToExtension(extWS, map[string]interface{}{
-		"type":   "cdp_command",
-		"tabId":  tabId,
-		"method": methodName,
-		"params": params,
-		"id":     reqId,
-	})
+	if s.backend == nil {
+		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: "no backend"}})
+		return
+	}
 
-	select {
-	case <-time.After(30 * time.Second):
-		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: "timeout"}})
-	case result := <-resultCh:
-		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: result})
-	case err := <-errCh:
+	result, err := s.backend.SendCommand(tabId, method, params)
+	if err != nil {
 		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: err.Error()}})
+		return
 	}
+
+	data, merr := json.Marshal(result)
+	if merr != nil {
+		s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Error: &RpcError{Code: -32000, Message: fmt.Errorf("marshal result: %w", merr).Error()}})
+		return
+	}
+	s.writeJson(client.ws, JsonRpcResponse{ID: req.ID, Result: data})
 }
 
 // ─── Await helpers ─────────────────────────────────────────────────────────
@@ -776,9 +749,9 @@ func (s *CdpServer) checkAuth(r *http.Request) bool {
 	return false
 }
 
-func (s *CdpServer) buildTargetList() map[string]interface{} {
-	targets := make([]TargetInfo, 0, len(s.cachedTabs))
-	for _, tab := range s.cachedTabs {
+func (s *CdpServer) buildTargetList(tabs []Tab) map[string]interface{} {
+	targets := make([]TargetInfo, 0, len(tabs))
+	for _, tab := range tabs {
 		targets = append(targets, TargetInfo{
 			TargetId:       "tab-" + strconv.Itoa(tab.ID),
 			Type:           "page",

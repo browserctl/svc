@@ -1,100 +1,101 @@
-# browserctl/svc
+# browserctl-svc
 
-WebSocket service that bridges browserctl CLI to Chrome extension for browser automation.
+**Browser automation platform for AI agents.**
 
-## Architecture
+browserctl-svc connects to a Chrome browser on the local machine, exposes a clean HTTP API for browser control, and records intercepted network events to disk. The client is an AI agent — it talks HTTP, it gets HTTP back, it never touches CDP or WebSocket.
 
+---
+
+## What it is
+
+AI agents need to control a browser — click buttons, type text, scroll pages, execute JavaScript, watch network traffic. Most browser automation tools are built for human use or web scraping. browserctl-svc is built for AI: stateless HTTP client interface, session state on the server, and passive network interception.
+
+**Primary use case:** An AI agent sits down at the employee's Chrome (with their cookies, extensions, and logged-in sessions intact), controls it via HTTP, and observes network traffic without interrupting it.
+
+---
+
+## Quick start
+
+```bash
+# Start svc
+./browserctl-svc
+
+# Create a session (connect to running Chrome)
+curl -X POST http://localhost:9222/sessions \
+  -d '{"cdp_url": "http://localhost:9336"}'
+
+# Navigate
+curl -X POST http://localhost:9222/sessions/s_abc123/tabs/tab_1/navigate \
+  -d '{"url": "https://example.com"}'
+
+# Click
+curl -X POST http://localhost:9222/sessions/s_abc123/tabs/tab_1/click \
+  -d '{"selector": "button.submit"}'
+
+# Intercept network traffic
+curl -X POST http://localhost:9222/sessions/s_abc123/intercept \
+  -d '{"patterns": ["*google-analytics*"]}'
+
+# Read one event
+curl http://localhost:9222/sessions/s_abc123/tabs/tab_1/intercepted
+
+# Close
+curl -X DELETE http://localhost:9222/sessions/s_abc123
 ```
-browserctl CLI → browserctl/svc → Chrome extension → Chrome browser
-```
 
-The service acts as a transparent CDP proxy:
-- Accepts WebSocket connections from CLI clients
-- Connects to Chrome extension via WebSocket
-- Forwards CDP commands to extension
-- Routes tabs and windows intelligently
+---
 
-## Features
+## Core concepts
 
-- **Transparent CDP Proxy** - Standard Chrome DevTools Protocol compatibility
-- **Tab/Window Routing** - Routes commands to correct tab based on domain
-- **Multi-window Support** - Manages multiple Chrome windows
-- **Extension Bridge** - Connects CLI to Chrome extension
-- **HTTP API** - Health check and status endpoints
+### Session
 
-## Ports
+A Session is a persistent connection to one Chrome instance. It holds the tab list, intercept rules, and event buffer. Sessions live on svc until explicitly closed.
 
-| Port | Protocol | Description |
-|------|----------|-------------|
-| 9222 | WebSocket | CDP commands from CLI |
-| 9223 | HTTP | Health check, status |
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/sessions` | Create session (launch or connect Chrome) |
+| `GET` | `/sessions/:id` | Get current state |
+| `DELETE` | `/sessions/:id` | Close session |
+
+### Tab
+
+A Tab is a Chrome tab within a session. Each tab has an internal ID (`tab_1`, `tab_2`...), a visible URL, and a title. svc tracks tabs via CDP `Target.targetCreated` / `Target.targetDestroyed` events.
+
+### Intercept
+
+Passive network monitoring. Requests matching URL patterns are recorded to disk — request and response merged into one JSON object. Chrome handles requests normally; svc only observes. **No modification, no blocking.**
+
+---
 
 ## Configuration
 
-Environment variables or config file:
-
 ```bash
-BROWSERCTL_SECRET=your-secret          # Auth secret
-BROWSERCTL_SVC_PORT=9222             # WebSocket port
-BROWSERCTL_HTTP_PORT=9223             # HTTP API port
-BROWSERCTL_PROFILE_DIR=~/.config/google-chrome  # Chrome profile
+BROWSERCTL_SVC_PORT=9222            # HTTP API port (default: 9222)
+BROWSERCTL_DATA_DIR=~/.browserctl   # data directory
+BROWSERCTL_SECRET=                  # auth secret (optional)
 ```
 
-Or in `.env` / `config.json`:
+Or in `.env` / `config.json` in the working directory.
+
+---
+
+## Project structure
 
 ```
-BROWSERCTL_SECRET=your-secret
-BROWSERCTL_SVC_PORT=9222
-BROWSERCTL_HTTP_PORT=9223
-BROWSERCTL_PROFILE_DIR=~/.config/google-chrome
+svc/
+├── cmd/svc/main.go              # entry point, flag parsing, server bootstrap
+└── internal/
+    ├── chrome/                 # Chrome launcher + CDP connection helpers
+    ├── http/                    # HTTP router, middleware, handlers
+    └── connector/               # Connector interface + implementations
 ```
 
-## HTTP API
+---
 
-### Health Check
+## See also
 
-```bash
-curl http://localhost:9223/health
-```
-
-### Status
-
-```bash
-curl http://localhost:9223/status
-```
-
-## Installation
-
-```bash
-make build
-sudo make install
-```
-
-## Service Management
-
-**Linux:**
-```bash
-sudo systemctl start browserctl-svc
-sudo systemctl stop browserctl-svc
-sudo systemctl restart browserctl-svc
-sudo journalctl -u browserctl-svc -f
-```
-
-**macOS:**
-```bash
-launchctl load ~/Library/LaunchAgents/com.browserctl.svc.plist
-launchctl unload ~/Library/LaunchAgents/com.browserctl.svc.plist
-```
-
-## Development
-
-```bash
-make lint    # Run linters
-make test    # Run tests
-make build   # Build binary
-```
-
-## See Also
-
-- [browserctl/cli](https://github.com/browserctl/cli) - CLI documentation
-- [browserctl/ext](https://github.com/browserctl/ext) - Chrome extension documentation
+- [API Reference](docs/API.md) — Full HTTP endpoint reference
+- [Design](docs/DESIGN.md) — Architecture, data models, semantics
+- [Storage](docs/STORAGE.md) — Directory layout, file formats, rotation
+- [browserctl/cli](https://github.com/browserctl/cli) — CLI client
+- [sharingan](../sharingan) — Novel scraper provider built on browserctl-svc
