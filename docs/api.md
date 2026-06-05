@@ -10,6 +10,32 @@ Base URL: `http://localhost:9222`
 
 ---
 
+## Table of Contents
+
+- [Session](#session)
+  - [`POST /sessions` — Create session](#post-sessions--create-session)
+  - [`GET /sessions/:id` — Reuse session](#get-sessionsid--reuse-session)
+  - [`DELETE /sessions/:id` — Close session](#delete-sessionsid--close-session)
+- [Tabs](#tabs)
+  - [`GET /sessions/:id/tabs` — List tabs](#get-sessionsidtabs--list-tabs)
+  - [`POST /sessions/:id/tabs` — Open new tab](#post-sessionsidtabs--open-new-tab)
+- [Page Actions](#page-actions)
+  - [`POST /sessions/:id/tabs/:tabId/navigate`](#post-sessionsidtabstabidnavigate)
+  - [`POST /sessions/:id/tabs/:tabId/hover`](#post-sessionsidtabstabidhover)
+  - [`POST /sessions/:id/tabs/:tabId/click`](#post-sessionsidtabstabidclick)
+  - [`POST /sessions/:id/tabs/:tabId/type`](#post-sessionsidtabstabidtype)
+  - [`POST /sessions/:id/tabs/:tabId/scroll`](#post-sessionsidtabstabidscroll)
+  - [`POST /sessions/:id/tabs/:tabId/evaluate`](#post-sessionsidtabstabidevaluate)
+  - [`POST /sessions/:id/tabs/:tabId/waitForSelector`](#post-sessionsidtabstabidwaitforselector)
+- [Page State](#page-state)
+  - [`GET /sessions/:id/tabs/:tabId/screenshot`](#get-sessionsidtabstabidscreenshot)
+  - [`GET /sessions/:id/tabs/:tabId/dom`](#get-sessionsidtabstabiddom)
+- [Network Interception](#network-interception)
+  - [`POST /sessions/:id/intercept` — Set intercept patterns](#post-sessionsidintercept--set-intercept-patterns)
+  - [`GET /sessions/:id/tabs/:tabId/intercepted` — Read one event](#get-sessionsidtabstabidintercepted--read-one-intercepted-event)
+
+---
+
 ## Session
 
 ### `POST /sessions` — Create session
@@ -528,7 +554,7 @@ curl http://localhost:9222/sessions/s_abc123def/tabs/tab_1/intercepted
 
 **Read position** is tracked per tab in `meta.json` under `intercept_read_seq`. Each successful read increments it atomically (write-then-rename). Multiple concurrent GET calls on the same tab are serialized via `sync.RWMutex` — each call consumes exactly one event.
 
-**If interception is not active**, returns `{ "request": null }`.
+**When the queue is empty**, returns `{ "request": null }`.
 
 ---
 
