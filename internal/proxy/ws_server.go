@@ -41,10 +41,10 @@ type extensionWS struct {
 
 // pendingCallback handles async response waiting
 type pendingCallback struct {
-	id        int64
-	client    *clientWS
-	method    string
-	onResult  func(result interface{}, errMsg string)
+	_       int64   // formerly: id (used by ws_server.go)
+	_       *clientWS // formerly: client (used by ws_server.go)
+	_       string  // formerly: method (used by ws_server.go)
+	onResult func(result interface{}, errMsg string)
 	handled   bool // true when result was sent via handleCdpResult
 	handledMu sync.Mutex
 }
@@ -58,12 +58,6 @@ func (p *pendingCallback) tryMarkHandled() bool {
 	}
 	p.handled = true
 	return true
-}
-
-// newPendingCallback is only used by tests (excluded from lint)
-//nolint:unused
-func newPendingCallback(client *clientWS, method string, onResult func(result interface{}, errMsg string)) *pendingCallback {
-	return &pendingCallback{client: client, method: method, onResult: onResult}
 }
 
 // CdpServer is the transparent CDP proxy.

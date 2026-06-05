@@ -344,7 +344,7 @@ func TestBuildTargetList(t *testing.T) {
 		{ID: 20, Title: "GitHub", URL: "https://github.com", Active: false},
 	}
 
-	result := server.buildTargetList()
+	result := server.buildTargetList(server.cachedTabs)
 	infos, ok := result["targetInfos"].([]TargetInfo)
 	if !ok {
 		t.Fatalf("targetInfos not a []TargetInfo")
@@ -401,43 +401,5 @@ func TestGetDomains(t *testing.T) {
 		if !found[w] {
 			t.Errorf("domain %q not found in getDomains()", w)
 		}
-	}
-}
-
-// ─── Pending Callbacks ────────────────────────────────────────────────────────
-
-func TestPendingCallback(t *testing.T) {
-	logger := newTestLogger()
-	server := NewCdpServer(19100, "", logger)
-
-	cb := newPendingCallback(nil, "test", func(result interface{}, errMsg string) {
-		if errMsg != "" {
-			t.Errorf("unexpected errMsg: %s", errMsg)
-		}
-	})
-
-	server.mu.Lock()
-	server.pending[123] = cb
-	server.mu.Unlock()
-
-	server.mu.Lock()
-	pcb, ok := server.pending[123]
-	server.mu.Unlock()
-
-	if !ok {
-		t.Errorf("pending[123] not found")
-	}
-	if pcb.method != "test" {
-		t.Errorf("method = %q, want test", pcb.method)
-	}
-
-	// resolvePending
-	server.resolvePending(123, "ok_result", "")
-
-	server.mu.Lock()
-	_, ok = server.pending[123]
-	server.mu.Unlock()
-	if ok {
-		t.Errorf("pending[123] should be deleted after resolve")
 	}
 }

@@ -37,7 +37,6 @@ type DirectCDPBackend struct {
 	conn    *websocket.Conn
 	readLoopCtx context.Context
 	readLoopCancel context.CancelFunc
-	tabInfo *chromeTabInfo // tab info from /json discovery (used for routing)
 
 	pending map[int64]*directPendingCallback
 	mu      sync.Mutex
@@ -188,7 +187,11 @@ func (b *DirectCDPBackend) discoverTabs() ([]chromeTabInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("http get %s: %w", reqUrl, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			b.logger.Debug("resp.Body.Close", "err", cerr)
+		}
+	}()
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("json endpoint: status %d", resp.StatusCode)
 	}
@@ -261,9 +264,13 @@ func (b *DirectCDPBackend) readLoop() {
 		}
 
 		conn.SetReadLimit(directMaxSize)
-		conn.SetReadDeadline(time.Now().Add(directPongWait))
+		if err := conn.SetReadDeadline(time.Now().Add(directPongWait)); err != nil {
+			b.logger.Debug("SetReadDeadline", "err", err)
+		}
 		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(directPongWait))
+			if err := conn.SetReadDeadline(time.Now().Add(directPongWait)); err != nil {
+				b.logger.Debug("SetReadDeadline in pong handler", "err", err)
+			}
 			return nil
 		})
 
@@ -328,7 +335,9 @@ func (b *DirectCDPBackend) writeJSON(v interface{}) error {
 	if conn == nil {
 		return fmt.Errorf("not connected")
 	}
-	conn.SetWriteDeadline(time.Now().Add(directWriteWait))
+	if err := conn.SetWriteDeadline(time.Now().Add(directWriteWait)); err != nil {
+		return err
+	}
 	return conn.WriteJSON(v)
 }
 
@@ -340,15 +349,7 @@ func (b *DirectCDPBackend) nextId() int64 {
 	return id
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-func getString(m map[string]interface{}, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
+// lastIndexByte returns the last index of c in s, or -1 if not found.
 func lastIndexByte(s string, c byte) int {
 	for i := len(s) - 1; i >= 0; i-- {
 		if s[i] == c {
@@ -356,18 +357,4 @@ func lastIndexByte(s string, c byte) int {
 		}
 	}
 	return -1
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	pos := len(buf)
-	for i > 0 {
-		pos--
-		buf[pos] = byte('0' + i%10)
-		i /= 10
-	}
-	return string(buf[pos:])
 }
