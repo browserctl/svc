@@ -94,8 +94,8 @@ svc/
 
 ## See also
 
-- [API Reference](docs/api.md) — Full HTTP endpoint reference
-- [Design](docs/design.md) — Architecture, data models, semantics
-- [Storage](docs/storage.md) — Directory layout, file formats, rotation
+- [API Reference](docs/API.md) — Full HTTP endpoint reference
+- [Design](docs/DESIGN.md) — Architecture, data models, semantics
+- [Storage](docs/STORAGE.md) — Directory layout, file formats, rotation
 - [browserctl/cli](https://github.com/browserctl/cli) — CLI client
 - [sharingan](../sharingan) — Novel scraper provider built on browserctl-svc
