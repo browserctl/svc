@@ -116,14 +116,15 @@ One JSON object per line, written after the response is received:
 ### Reading Protocol
 
 ```
-GET /sessions/:id/tabs/:tabId/requests
-1. Open the event directory
-2. Read all .jsonl files in order
-3. Filter lines by tab_id matching the requested tab
-4. Return matching entries in chronological order
+GET /sessions/:id/tabs/:tabId/intercepted
+1. RLock read position for tabId
+2. If read_pos > write_pos → return { request: null }
+3. Open file matching read_pos (e.g. 0000010038.jsonl)
+4. Seek to line (read_pos % 100000) in that file
+5. Read one line
+6. Lock + increment read_pos in meta.json (atomic write-then-rename)
+7. Return the event
 ```
-
-The response is constructed by reading from disk on every request. No in-memory caching of intercepted events — disk is the source of truth.
 
 ### No Cleanup
 

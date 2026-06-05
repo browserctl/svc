@@ -117,7 +117,8 @@ type Session struct {
 
     // Intercept
     InterceptPatterns []string  // empty = interception disabled
-    InterceptDir     string     // ~/.browserctl/events/{id}/intercepted/
+    InterceptWriteSeq  int      // highest seq written to event file
+    InterceptReadSeq    map[string]int // per-tab read position
 }
 ```
 
@@ -309,7 +310,7 @@ type Connector interface {
 
     // Network interception
     SetIntercept(ctx context.Context, sessionId string, patterns []string) error
-    GetRequests(ctx context.Context, sessionId, tabId string) ([]InterceptedRequest, error)
+    GetRequests(ctx context.Context, sessionId, tabId string) (*InterceptedRequest, error)
 }
 ```
 
@@ -319,10 +320,10 @@ type Connector interface {
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| **Phase 1** | Session lifecycle, navigate, click, type, scroll, evaluate, wait, screenshot, dom | Current |
-| **Phase 2** | Network interception (intercept + pull merged requests) | Planned |
+| **Phase 1** | Session lifecycle, navigate, hover, click, type, scroll, evaluate, waitForSelector, screenshot, dom | Current |
+| **Phase 2** | Network interception (intercept + read one event at a time) | Planned |
 | **Phase 3** | Session metadata persistence across svc restarts | Planned |
-| **Phase 4** | ExtensionBackend (production Chrome connection via browserctl extension) | Planned |
+| **Phase 4** | ExtensionConnector (production Chrome connection via browserctl extension) | Planned |
 
 ---
 

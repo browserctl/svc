@@ -469,8 +469,7 @@ curl -X POST http://localhost:9222/sessions/s_abc123def/intercept \
 ```json
 // response 200
 {
-  "patterns": ["*google-analytics*", "*doubleclick*", "*facebook.net*"],
-  "active": true
+  "patterns": ["*google-analytics*", "*doubleclick*", "*facebook.net*"]
 }
 ```
 
